@@ -1,0 +1,27 @@
+# Byte-compiled / optimized files
+/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environments
+/.venv
+venv/
+env/
+
+# Editor files
+.vscode/
+.idea/
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+dist/
+build/
+
+# Logs and databases
+*.log
+*.sqlite3
+/.env
