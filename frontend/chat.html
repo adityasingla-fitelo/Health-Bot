@@ -4,12 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-  <title>Niva AI</title>
+  <title>Niva</title>
 
   <!-- Styles -->
   <link rel="stylesheet" href="./styles.css" />
-
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 
 <body>
@@ -18,8 +16,8 @@
 
     <!-- Sidebar -->
     <aside class="sidebar">
-      <h2>Niva AI</h2>
-      <p class="sidebar-sub">Health & lifestyle assistant</p>
+      <h2>Niva</h2>
+      <p class="sidebar-sub">Health & lifestyle</p>
     </aside>
 
     <!-- Chat Area -->
@@ -29,19 +27,21 @@
       <div class="chat-header">
         <div>
           <h3>Niva</h3>
-          <span>Online</span>
+          <span class="status">online</span>
         </div>
       </div>
 
       <!-- Messages -->
       <div class="chat-window" id="chatWindow">
         <div class="bubble niva">
-          Hi, I’m Niva. How can I help you with your health goals today?
+          Hi, I’m Niva.
+          <br />
+          How can I help you with your health today?
         </div>
       </div>
 
       <!-- Typing Indicator -->
-      <div class="typing" id="typingIndicator">
+      <div class="typing hidden" id="typingIndicator">
         Niva is typing…
       </div>
 
@@ -50,7 +50,7 @@
         <input
           id="userInput"
           type="text"
-          placeholder="Ask about diet, fitness, skin care or habits"
+          placeholder="Ask about diet, fitness, skin, habits"
           autocomplete="off"
         />
         <button id="sendBtn">Send</button>

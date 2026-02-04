@@ -6,12 +6,15 @@ const loginBtn = document.getElementById("loginBtn");
 if (loginBtn) {
   loginBtn.addEventListener("click", async () => {
     const emailInput = document.getElementById("emailInput");
-    const email = emailInput.value.trim();
+    const email = emailInput ? emailInput.value.trim() : "";
 
     if (!email) {
       alert("Please enter your email");
       return;
     }
+
+    loginBtn.disabled = true;
+    loginBtn.textContent = "Please wait...";
 
     try {
       const res = await fetch("http://127.0.0.1:8000/auth/login", {
@@ -23,35 +26,56 @@ if (loginBtn) {
       if (!res.ok) {
         const err = await res.text();
         console.error("Login failed:", err);
-        alert("Login failed. Check backend logs.");
+        alert("Login failed. Please try again.");
         return;
       }
 
       const data = await res.json();
-      localStorage.setItem("user_id", data.user_id);
 
+      if (!data.user_id) {
+        console.error("Invalid login response:", data);
+        alert("Login failed. Invalid server response.");
+        return;
+      }
+
+      localStorage.setItem("user_id", data.user_id);
       window.location.href = "chat.html";
     } catch (error) {
       console.error("Network error:", error);
       alert("Backend not reachable");
+    } finally {
+      loginBtn.disabled = false;
+      loginBtn.textContent = "Continue";
     }
   });
 }
 
 
 // ─────────────────────────────────────────────
-// CHAT PAGE LOGIC
+// CHAT PAGE GUARD (VERY IMPORTANT)
 // ─────────────────────────────────────────────
-const sendBtn = document.getElementById("sendBtn");
-const userInput = document.getElementById("userInput");
 const chatWindow = document.getElementById("chatWindow");
+const userInput = document.getElementById("userInput");
+const sendBtn = document.getElementById("sendBtn");
 const typingIndicator = document.getElementById("typingIndicator");
 
-if (sendBtn) {
-  sendBtn.addEventListener("click", sendMessage);
+if (chatWindow) {
+  const userId = localStorage.getItem("user_id");
+
+  if (!userId || userId === "undefined") {
+    alert("Session expired. Please login again.");
+    localStorage.removeItem("user_id");
+    window.location.href = "login.html";
+  }
 }
 
-if (userInput) {
+
+// ─────────────────────────────────────────────
+// CHAT PAGE LOGIC
+// ─────────────────────────────────────────────
+if (sendBtn && userInput) {
+  sendBtn.addEventListener("click", sendMessage);
+
   userInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
       e.preventDefault();
@@ -65,60 +89,95 @@ async function sendMessage() {
   if (!message) return;
 
   const userId = localStorage.getItem("user_id");
-  if (!userId) {
-    alert("User not logged in. Please login again.");
-    window.location.href = "login.html";
-    return;
-  }
+  if (!userId) return;
 
-  // Show user message
   appendMessage(message, "user");
   userInput.value = "";
 
-  // Show typing indicator
-  typingIndicator.style.display = "block";
+  if (typingIndicator) {
+    typingIndicator.classList.remove("hidden");
+  }
 
   try {
     const res = await fetch("http://127.0.0.1:8000/chat/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        user_id: userId,
-        message: message,
-      }),
+      body: JSON.stringify({ user_id: userId, message }),
     });
 
     if (!res.ok) {
-      const err = await res.text();
-      console.error("Chat error:", err);
-      appendMessage("Something went wrong. Please try again.", "niva");
-      typingIndicator.style.display = "none";
+      appendMessage("Something went wrong. Try again.", "niva");
       return;
     }
 
     const data = await res.json();
-
-    typingIndicator.style.display = "none";
-    appendMessage(data.reply, "niva");
+    renderNivaReply(data.reply);
 
   } catch (error) {
-    console.error("Network error:", error);
-    typingIndicator.style.display = "none";
     appendMessage("Backend not reachable.", "niva");
+  } finally {
+    if (typingIndicator) {
+      typingIndicator.classList.add("hidden");
+    }
   }
 }
 
 
 // ─────────────────────────────────────────────
-// MESSAGE RENDERING (🔥 FIXED PART 🔥)
+// MESSAGE RENDERING
 // ─────────────────────────────────────────────
+
+function escapeHtml(str) {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function formatInlineMarkdown(text) {
+  let escaped = escapeHtml(text);
+  // **bold**
+  escaped = escaped.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  return escaped;
+}
+
+function formatMarkdownBlock(text) {
+  const lines = text.split("\n");
+  let html = "";
+  let inList = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    if (trimmed.startsWith("- ")) {
+      if (!inList) {
+        html += "<ul>";
+        inList = true;
+      }
+      const item = trimmed.slice(2);
+      html += "<li>" + formatInlineMarkdown(item) + "</li>";
+    } else {
+      if (inList) {
+        html += "</ul>";
+        inList = false;
+      }
+      html += "<p>" + formatInlineMarkdown(trimmed) + "</p>";
+    }
+  }
+
+  if (inList) html += "</ul>";
+  return html || formatInlineMarkdown(text);
+}
+
 function appendMessage(text, sender) {
+  if (!chatWindow) return;
+
   const bubble = document.createElement("div");
   bubble.className = `bubble ${sender}`;
 
-  // ✅ Render Markdown properly
-  if (sender === "niva" && window.marked) {
-    bubble.innerHTML = marked.parse(text);
+  if (sender === "niva") {
+    bubble.innerHTML = formatMarkdownBlock(text);
   } else {
     bubble.textContent = text;
   }
@@ -126,3 +185,38 @@ function appendMessage(text, sender) {
   chatWindow.appendChild(bubble);
   chatWindow.scrollTop = chatWindow.scrollHeight;
 }
+
+function renderNivaReply(replyText) {
+  if (!replyText) return;
+
+  // Expect up to 3 logical parts separated by newlines:
+  // 1) short acknowledgement ("hmm samajh gayi")
+  // 2) short validation/appreciation
+  // 3) main detailed answer (may itself contain internal newlines / markdown)
+  const rawParts = replyText
+    .split("\n")
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0);
+
+  if (rawParts.length === 0) return;
+
+  let greet = "";
+  let appreciate = "";
+  let main = "";
+
+  if (rawParts.length === 1) {
+    main = rawParts[0];
+  } else if (rawParts.length === 2) {
+    greet = rawParts[0];
+    main = rawParts[1];
+  } else {
+    greet = rawParts[0];
+    appreciate = rawParts[1];
+    main = rawParts.slice(2).join("\n");
+  }
+
+  if (greet) appendMessage(greet, "niva");
+  if (appreciate) appendMessage(appreciate, "niva");
+  if (main) appendMessage(main, "niva");
+}
+
